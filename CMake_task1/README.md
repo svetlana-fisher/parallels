@@ -14,3 +14,6 @@ make
 
 для double
 ./sin_sum double
+
+0.094364 float
+-6.76916e-10 double
