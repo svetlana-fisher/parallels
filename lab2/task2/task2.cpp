@@ -49,10 +49,6 @@ int main(){
     const auto end{std::chrono::steady_clock::now()};
     const std::chrono::duration<double> elapsed_seconds{end - start};
 
-    // std::cout << "Your calculations took " <<
-    //             elapsed_seconds.count() <<
-    //             " seconds to run chrono.\n"; // Before C++20
-
     std::cout << elapsed_seconds.count() << std::endl;
 
     return 0;
