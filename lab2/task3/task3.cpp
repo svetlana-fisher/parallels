@@ -68,6 +68,8 @@ std::vector<double> init_x_parallel(int N){
 }
 
 void solution(const std::vector<double>& A, std::vector<double>& x, const std::vector<double>& b, double tau, double E, int N, int NUM_THREADS){
+    #pragma omp parallel num_threads(NUM_THREADS)
+    {
     std::vector<double> tmp_vec(N);
 
     double err = std::numeric_limits<double>::max();
@@ -82,10 +84,8 @@ void solution(const std::vector<double>& A, std::vector<double>& x, const std::v
     while (err > E){
         double spectral_norm_A = 0; // ||Ax-b||2
 
-        #pragma omp parallel num_threads(NUM_THREADS)
-        {
-            
-
+        // #pragma omp parallel num_threads(NUM_THREADS)
+        // {
             int nthreads = omp_get_num_threads();
             int threadid = omp_get_thread_num();
             int items_per_thread = N / nthreads;
@@ -102,12 +102,13 @@ void solution(const std::vector<double>& A, std::vector<double>& x, const std::v
                 tmp_vec[i] -= b[i]; // Ax-b
                 part_spectral_norm_A += tmp_vec[i] * tmp_vec[i];
                 x[i] -= tau * tmp_vec[i];
-            }
+            // }
             #pragma omp atomic
             spectral_norm_A += part_spectral_norm_A;
         }
         spectral_norm_A = sqrt(spectral_norm_A);
         err = spectral_norm_A / spectral_norm_b;
+    }
     }
 
 }

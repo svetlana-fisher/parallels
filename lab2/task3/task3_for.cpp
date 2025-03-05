@@ -60,6 +60,7 @@ void solution_for(const std::vector<double>& A, std::vector<double>& x, const st
     }
     spectral_norm_b = sqrt(spectral_norm_b);
 
+    E *= spectral_norm_b; // заменяем деление для ускорения программы
 
     while (err > E){
         double spectral_norm_A = 0; // ||Ax-b||2
@@ -78,7 +79,7 @@ void solution_for(const std::vector<double>& A, std::vector<double>& x, const st
                 spectral_norm_A += tmp_vec[i];
             }
         spectral_norm_A = sqrt(spectral_norm_A);
-        err = spectral_norm_A / spectral_norm_b;
+        err = spectral_norm_A; // убрали деление, умножив E  spectral_norm_b
     }
 
 }
