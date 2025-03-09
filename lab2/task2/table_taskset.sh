@@ -23,15 +23,15 @@ t40=0
 
 
 for i in $(seq 1 ${N}); do
-    t1=$(taskset -c 1 ./laba0_task2)
+    t1=$(taskset -c 1 ./task2)
     T1=$(echo "${T1} + ${t1}" | bc)
-    t2=$(echo "${t2} + $(taskset -c 0-1 ./laba0_task2)" | bc)
-    t4=$(echo "${t4} + $(taskset -c 0-3 ./laba0_task2)" | bc)
-    t7=$(echo "${t7} + $(taskset -c 0-6 ./laba0_task2)" | bc)
-    t8=$(echo "${t8} + $(taskset -c 0-7 ./laba0_task2)" | bc)
-    t16=$(echo "${t16} + $(taskset -c 0-15 ./laba0_task2)" | bc)
-    t20=$(echo "${t20} + $(taskset -c 0-19 ./laba0_task2)" | bc)
-    t40=$(echo "${t40} + $(taskset -c 0-39 ./laba0_task2)" | bc)
+    t2=$(echo "${t2} + $(taskset -c 0-1 ./task2)" | bc)
+    t4=$(echo "${t4} + $(taskset -c 0-3 ./task2)" | bc)
+    t7=$(echo "${t7} + $(taskset -c 0-6 ./task2)" | bc)
+    t8=$(echo "${t8} + $(taskset -c 0-7 ./task2)" | bc)
+    t16=$(echo "${t16} + $(taskset -c 0-15 ./task2)" | bc)
+    t20=$(echo "${t20} + $(taskset -c 0-19 ./task2)" | bc)
+    t40=$(echo "${t40} + $(taskset -c 0-39 ./task2)" | bc)
 done
 
 
