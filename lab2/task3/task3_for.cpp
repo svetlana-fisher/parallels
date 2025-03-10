@@ -36,18 +36,11 @@ std::vector<double> init_B_parallel_for(int N, int NUM_THREADS){
     return std::move(B);
 }
 
-std::vector<double> init_x_parallel_for(int N, int NUM_THREADS){
-    std::vector<double> x(N);
 
-    #pragma omp parallel for num_threads(NUM_THREADS)
-    for (int i = 0; i < N; i++) {
-        x[i] = 0;
-    }  
-    return std::move(x);
-}
-
-void solution_for(const std::vector<double>& A, std::vector<double>& x, const std::vector<double>& b, double tau, double E, int N, int NUM_THREADS){
+void solution_for(const std::vector<double>& A, const std::vector<double>& b, double tau, double E, int N, int NUM_THREADS){
     std::vector<double> tmp_vec(N);
+
+    std::vector<double> x(N, 0.0);
 
     double err = std::numeric_limits<double>::max();
 
@@ -106,10 +99,10 @@ int main(int argc, char* argv[]) {
     std::vector<double> b = init_B_parallel_for(N, 4);
 
 
-    // заполняем x
-    std::vector<double> x = init_x_parallel_for(N, 4);
+
+
     auto start = std::chrono::steady_clock::now();
-    solution_for(A, x, b, tau, E, N, 1);
+    solution_for(A, b, tau, E, N, 1);
     auto end = std::chrono::steady_clock::now();
     std::chrono::duration<double> elapsed_seconds = end - start;
     std::cout << elapsed_seconds.count() << std::endl;
@@ -117,15 +110,12 @@ int main(int argc, char* argv[]) {
 
     std::vector<int> numbers = {2, 4, 6, 10, 16};
     for (int num_threads : numbers) {
-        // заполняем x
-        x = init_x_parallel_for(N, 4);
         start =std::chrono::steady_clock::now();
-        solution_for(A, x, b, tau, E, N, num_threads);
+        solution_for(A, b, tau, E, N, num_threads);
         end = std::chrono::steady_clock::now();
         std::chrono::duration<double> other_elapsed_seconds = end - start;
         std::cout << "T" << num_threads << "=" << other_elapsed_seconds.count();
         std::cout << " S" << num_threads << "=" << elapsed_seconds.count()/other_elapsed_seconds.count() << std::endl;
     }
-    
     return 0;
 }
