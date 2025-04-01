@@ -21,6 +21,7 @@ public:
     {
       std::unique_lock<std::mutex> lock(mtx);
       running = true;
+      cv.notify_all();
     }
 
     server = std::thread([this] {
@@ -67,8 +68,8 @@ public:
     {
       std::unique_lock<std::mutex> lock(mtx);
       running = false;
+      cv.notify_all();
     }
-    cv.notify_all();
     if (server.joinable())
       server.join();
   }
