@@ -90,7 +90,6 @@ def sensor_thread(sensor, queue_elem: queue.Queue, event_stop: threading.Event):
         queue_elem.put(data)
 
 
-
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Video settings")
     parser.add_argument("--name", "-n", type=str, default="my_camera", help="camera name")
@@ -117,6 +116,7 @@ def update_sensor_values(queues, sensor_values):
         while not queues[i].empty():
             item = queues[i].get()
             sensor_values[i] = item
+
 
 def draw_text_on_frame(frame, sensor_values):
     text_lines = [
@@ -157,20 +157,22 @@ def main():
     sensor_cam = SensorCam(args.name, h, w)
     window_img = WindowImage(frequency)
 
-    queue_elems = [queue.Queue() for _ in range(3)]
+    queue_elems = [queue.Queue() for _ in range(4)]
     event_stop = threading.Event()
 
-    sensors = [sensor0, sensor1, sensor2]
+    sensors = [sensor0, sensor1, sensor2, sensor_cam]
     threads = create_sensor_threads(sensors, queue_elems, event_stop)
 
-    sensor_values = [0, 0, 0]
+    sensor_values = [0, 0, 0, None]
     try:
         while True:
             update_sensor_values(queue_elems, sensor_values)
-            frame = sensor_cam.get()
-            draw_text_on_frame(frame, sensor_values)
-            window_img.show(frame)
-            time.sleep(1 / frequency)
+            # frame = sensor_cam.get()
+            frame = sensor_values[3]
+            if frame is not None:
+                draw_text_on_frame(frame, sensor_values[:3])
+                window_img.show(frame)
+                time.sleep(1 / frequency)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
