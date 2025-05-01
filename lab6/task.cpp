@@ -35,32 +35,28 @@ int main() {
     #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n]) 
     {
         while (err > ACCURACY && iter < MAX_ITERATION) {
-            #pragma acc kernels // Явно указываем, что следующий блок выполняется на GPU
-            {
-                err = 0.0;
+            err = 0.0;
 
-                #pragma acc parallel loop collapse(2) reduction(max:err) present(matrix, matrix_new)
-                for (int i = 1; i < n - 1; i++) {
-                    for (int j = 1; j < n - 1; j++) {
-                        matrix_new[i * n + j] = 0.25 * (
-                            matrix[(i + 1) * n + j] + 
-                            matrix[i * n + j + 1] + 
-                            matrix[i * n + j - 1] + 
-                            matrix[(i - 1) * n + j]
-                        );
-                        err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-                    }
+            #pragma acc parallel loop collapse(2) reduction(max:err) present(matrix, matrix_new)
+            for (int i = 1; i < n - 1; i++) {
+                for (int j = 1; j < n - 1; j++) {
+                    matrix_new[i * n + j] = 0.25 * (
+                        matrix[(i + 1) * n + j] + 
+                        matrix[i * n + j + 1] + 
+                        matrix[i * n + j - 1] + 
+                        matrix[(i - 1) * n + j]
+                    );
+                    err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
                 }
+            }
 
-                #pragma acc parallel loop collapse(2) present(matrix, matrix_new)
-                for (int i = 1; i < n - 1; i++) {
-                    for (int j = 1; j < n - 1; j++) {
-                        matrix[i * n + j] = matrix_new[i * n + j];
-                    }
+            #pragma acc parallel loop collapse(2) present(matrix, matrix_new)
+            for (int i = 1; i < n - 1; i++) {
+                for (int j = 1; j < n - 1; j++) {
+                    matrix[i * n + j] = matrix_new[i * n + j];
                 }
             }
             iter++;
-            
         }
     }
 
