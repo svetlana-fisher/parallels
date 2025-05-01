@@ -39,7 +39,7 @@ int main(){
         while (err > ACCURACY && iter < MAX_ITERATION){
             err = 0.0;
 
-            #pragma acc parallel loop reduction(max:err)
+            #pragma acc parallel loop collapse(2) reduction(max:err) present(matrix, matrix_new)
                 for (int i=1; i<n-1; i++){
                     for (int j=1; j<n-1; j++){
                         // std::cout << 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]) << std::endl;
@@ -48,7 +48,7 @@ int main(){
                     }
                 }
 
-            #pragma acc parallel loop
+            #pragma acc parallel loop collapse(2) present(matrix, matrix_new)
                 for (int i=1; i<n-1; i++){
                     for (int j=1; j<n-1; j++){
                         matrix[i*n + j] = matrix_new[i*n + j];
