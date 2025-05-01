@@ -32,36 +32,39 @@ int main() {
     double err = 1.0;
     int iter = 0;
 
-    // #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n]) 
-    // {
-        while (err > ACCURACY && iter < MAX_ITERATION) {
-            // #pragma acc kernels
-            // {
-                err = 0.0;
+    // Копируем данные на устройство
+    #pragma acc enter data copyin(matrix[0:n*n], matrix_new[0:n*n], err, iter, n)
 
-                // #pragma acc loop collapse(2) reduction(max:err)
-                for (int i = 1; i < n - 1; i++) {
-                    for (int j = 1; j < n - 1; j++) {
-                        matrix_new[i * n + j] = 0.25 * (
-                            matrix[(i + 1) * n + j] + 
-                            matrix[i * n + j + 1] + 
-                            matrix[i * n + j - 1] + 
-                            matrix[(i - 1) * n + j]
-                        );
-                        err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-                    }
-                }
-
-                // #pragma acc loop collapse(2)
-                for (int i = 1; i < n - 1; i++) {
-                    for (int j = 1; j < n - 1; j++) {
-                        matrix[i * n + j] = matrix_new[i * n + j];
-                    }
-                }
+    while (err > ACCURACY && iter < MAX_ITERATION) {
+        err = 0.0;
+        
+        // Вычисляем новые значения и ошибку
+        #pragma acc parallel loop present(matrix, matrix_new) independent collapse(2) reduction(max:err)
+        for (int i = 1; i < n - 1; i++) {
+            for (int j = 1; j < n - 1; j++) {
+                matrix_new[i * n + j] = 0.25 * (
+                    matrix[(i + 1) * n + j] + 
+                    matrix[i * n + j + 1] + 
+                    matrix[i * n + j - 1] + 
+                    matrix[(i - 1) * n + j]
+                );
+                err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
             }
-            iter++;
-        // }
-    // }
+        }
+
+        // Копируем новые значения обратно в matrix
+        #pragma acc parallel loop present(matrix, matrix_new) independent collapse(2)
+        for (int i = 1; i < n - 1; i++) {
+            for (int j = 1; j < n - 1; j++) {
+                matrix[i * n + j] = matrix_new[i * n + j];
+            }
+        }
+        
+        iter++;
+    }
+
+    // Копируем данные обратно на хост
+    #pragma acc exit data copyout(matrix[0:n*n])
 
     // Вывод матрицы
     for (int i = 0; i < n; ++i) {
