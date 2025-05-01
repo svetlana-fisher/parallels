@@ -34,25 +34,28 @@ int main(){
     double err = 1.0;
     int iter = 0;
     
-    while (err > ACCURACY && iter < MAX_ITERATION){
-        err = 0.0;
+    #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n])
+    {
+        while (err > ACCURACY && iter < MAX_ITERATION){
+            err = 0.0;
 
-        #pragma acc parallel loop reduction(max:err)
-            for (int i=1; i<n-1; i++){
-                for (int j=1; j<n-1; j++){
-                    // std::cout << 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]) << std::endl;
-                    matrix_new[i*n + j] = 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]);
-                    err = std::max(err, std::abs(matrix_new[i*n + j] - matrix[i*n + j]));
+            #pragma acc parallel loop reduction(max:err)
+                for (int i=1; i<n-1; i++){
+                    for (int j=1; j<n-1; j++){
+                        // std::cout << 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]) << std::endl;
+                        matrix_new[i*n + j] = 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]);
+                        err = std::max(err, std::abs(matrix_new[i*n + j] - matrix[i*n + j]));
+                    }
                 }
-            }
 
-        #pragma acc parallel loop
-            for (int i=1; i<n-1; i++){
-                for (int j=1; j<n-1; j++){
-                    matrix[i*n + j] = matrix_new[i*n + j];
+            #pragma acc parallel loop
+                for (int i=1; i<n-1; i++){
+                    for (int j=1; j<n-1; j++){
+                        matrix[i*n + j] = matrix_new[i*n + j];
+                    }
                 }
-            }
-        iter++;
+            iter++;
+        }
     }
     
 
