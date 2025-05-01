@@ -32,14 +32,14 @@ int main() {
     double err = 1.0;
     int iter = 0;
 
-    #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n]) 
-    {
+    // #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n]) 
+    // {
         while (err > ACCURACY && iter < MAX_ITERATION) {
-            #pragma acc kernels
-            {
+            // #pragma acc kernels
+            // {
                 err = 0.0;
 
-                #pragma acc loop collapse(2) reduction(max:err)
+                // #pragma acc loop collapse(2) reduction(max:err)
                 for (int i = 1; i < n - 1; i++) {
                     for (int j = 1; j < n - 1; j++) {
                         matrix_new[i * n + j] = 0.25 * (
@@ -52,7 +52,7 @@ int main() {
                     }
                 }
 
-                #pragma acc loop collapse(2)
+                // #pragma acc loop collapse(2)
                 for (int i = 1; i < n - 1; i++) {
                     for (int j = 1; j < n - 1; j++) {
                         matrix[i * n + j] = matrix_new[i * n + j];
@@ -60,8 +60,8 @@ int main() {
                 }
             }
             iter++;
-        }
-    }
+        // }
+    // }
 
     // Вывод матрицы
     for (int i = 0; i < n; ++i) {
