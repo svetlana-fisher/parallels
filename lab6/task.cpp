@@ -34,7 +34,7 @@ int main(){
     double err = 1.0;
     int iter = 0;
     
-    #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n])
+    #pragma acc data copy(matrix[0:n*n], matrix_new[0:n*n]) copy(err)
     {
         while (err > ACCURACY && iter < MAX_ITERATION){
             err = 0.0;
