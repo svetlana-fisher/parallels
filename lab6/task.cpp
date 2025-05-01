@@ -1,8 +1,8 @@
 #include <iostream>
 #include <cmath>
 
-#define MAX_ITERATION 100000
-#define ACCURACY 0.000001
+#define MAX_ITERATION 1000000
+#define ACCURACY 0.0000001
 
 void init_matrix(double* matrix, int n) {
     matrix[0] = 10.0;
@@ -54,17 +54,18 @@ int main() {
             }
         }
         
+        // Обновляем ошибку на хосте
         #pragma acc update self(err)
         
         iter++;
         
+        // Для отладки можно выводить ошибку
         if (iter % 1000 == 0) {
             std::cout << "Iteration: " << iter << " Error: " << err << std::endl;
         }
     }
 
-    #pragma acc update self(matrix[0:n*n])
-    #pragma acc exit data delete(matrix_new[0:n*n], n)
+    #pragma acc exit data copyout(matrix[0:n*n])
 
     // Вывод матрицы
     for (int i = 0; i < n; ++i) {
