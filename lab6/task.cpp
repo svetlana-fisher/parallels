@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 #define MAX_ITERATION 1000000
 #define ACCURACY 0.0000001
@@ -29,7 +30,7 @@ int main() {
     double err = 1.0;
     int iter = 0;
 
-    #pragma acc enter data copyin(matrix[0:n*n], matrix_new[0:n*n], n)
+    #pragma acc enter data copyin(matrix[0:n*n], matrix_new[0:n*n], err, iter, n)
 
     while (err > ACCURACY && iter < MAX_ITERATION) {
         err = 0.0;
@@ -54,15 +55,7 @@ int main() {
             }
         }
         
-        // Обновляем ошибку на хосте
-        #pragma acc update self(err)
-        
         iter++;
-        
-        // Для отладки можно выводить ошибку
-        if (iter % 1000 == 0) {
-            std::cout << "Iteration: " << iter << " Error: " << err << std::endl;
-        }
     }
 
     #pragma acc exit data copyout(matrix[0:n*n])
