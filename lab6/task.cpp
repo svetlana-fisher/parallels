@@ -5,7 +5,7 @@
 
 
 #define MAX_ITERATION 1000000
-#define ACCURACY 1e-6
+#define ACCURACY 0.0000001
 
 void init_matrix(std::vector<double>& matrix, int n){
     matrix[0] = 10.0; // верхний левый угол
@@ -31,15 +31,16 @@ int main(){
     init_matrix(matrix, n);
     init_matrix(matrix_new, n);
 
-    double err = 0.0;
+    double err = 1.0;
     int iter = 0;
-
+    
     while (err > ACCURACY && iter < MAX_ITERATION){
         err = 0.0;
 
         #pragma acc parallel loop reduction(max:err)
             for (int i=1; i<n-1; i++){
                 for (int j=1; j<n-1; j++){
+                    // std::cout << 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]) << std::endl;
                     matrix_new[i*n + j] = 0.25 * (matrix[(i+1)*n + j] + matrix[i*n + j+1] + matrix[i*n + j-1] + matrix[(i-1)*n + j]);
                     err = std::max(err, std::abs(matrix_new[i*n + j] - matrix[i*n + j]));
                 }
