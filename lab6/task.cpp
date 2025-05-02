@@ -30,12 +30,10 @@ int main() {
     double err = 1.0;
     int iter = 0;
 
-    #pragma acc enter data copyin(matrix[0:n*n], matrix_new[0:n*n], err, iter, n)
-
     while (err > ACCURACY && iter < MAX_ITERATION) {
         err = 0.0;
         
-        #pragma acc parallel loop present(matrix, matrix_new) collapse(2) reduction(max:err)
+        #pragma acc parallel loop collapse(2) reduction(max:err)
         for (int i = 1; i < n - 1; i++) {
             for (int j = 1; j < n - 1; j++) {
                 matrix_new[i * n + j] = 0.25 * (
@@ -48,7 +46,7 @@ int main() {
             }
         }
 
-        #pragma acc parallel loop present(matrix, matrix_new) collapse(2)
+        // #pragma acc parallel loop collapse(2)
         for (int i = 1; i < n - 1; i++) {
             for (int j = 1; j < n - 1; j++) {
                 matrix[i * n + j] = matrix_new[i * n + j];

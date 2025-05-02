@@ -3,9 +3,9 @@
 #include <vector>
 #include <algorithm> 
 #include <cmath>
-#include <boost/program_options.hpp> // Подключение библиотеки для обработки параметров командной строки
+#include <boost/program_options.hpp>
 
-namespace po = boost::program_options; // Создаем псевдоним для удобства
+namespace po = boost::program_options;
 
 void init_matrix(double* matrix, int n) {
     matrix[0] = 10.0;
@@ -44,11 +44,6 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    // Проверка допустимых размеров сетки
-    // if (n != 128 && n != 256 && n != 512 && n != 1024) {
-    //     std::cerr << "Error: Invalid grid size. Allowed sizes are 128, 256, 512, 1024.\n";
-    //     return 1;
-    // }
 
     double* matrix = new double[n * n];
     double* matrix_new = new double[n * n];
