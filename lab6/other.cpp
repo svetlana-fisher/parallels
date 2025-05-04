@@ -8,6 +8,9 @@
 #include <boost/program_options.hpp>
 
 namespace po = boost::program_options;
+bool which_step = 0;
+double accuracy = 1e-6;
+int max_iteration = 1000000;
 
 
 void init_matrix(double* matrix, int n) {
@@ -24,11 +27,67 @@ void init_matrix(double* matrix, int n) {
     }
 }
 
+void count_matrix(double* matrix_1, double* matrix_2, int n) {
+	double err = 1.0;
+    int iter = 0;
+	double norm_res = 0;
+	do {
+        err = 0.0;
+		if (which_step) {
+			// из первой во вторую
+      #pragma acc parallel loop collapse(2)
+			for (int i = 1; i < (n + 2) - 1; i++) {
+				for (int j = 1; j < (n + 2) - 1; j++) {
+					matrix_2[i * (n + 2) + j] = 0.25 * (matrix_1[i * (n + 2) + j - 1] 
+																				+ matrix_1[i * (n + 2) + j + 1]
+																				+ matrix_1[(i - 1) * (n + 2) + j] 
+																				+ matrix_1[(i + 1) * (n + 2) + j]);
+				};
+			}
+
+			double result = 0.0;
+			#pragma acc parallel loop reduction(+:result)
+			for (int i = 0; i < (n + 2) * (n + 2); i++) {
+				result += matrix_2[i] * matrix_2[i];
+			}
+			norm_res = sqrt(result);
+
+			which_step = 0;
+		} else { 
+			// из второй в первую
+      #pragma acc parallel loop collapse(2)
+			for (int i = 1; i < (n + 2) - 1; i++) {
+				for (int j = 1; j < (n + 2) - 1; j++) {
+					matrix_1[i * (n + 2) + j] = 0.25 * (matrix_2[i * (n + 2) + j - 1] 
+																				+ matrix_2[i * (n + 2) + j + 1]
+																				+ matrix_2[(i - 1) * (n + 2) + j] 
+																				+ matrix_2[(i + 1) * (n + 2) + j]);
+				};
+			}
+
+			double result = 0.0;
+			#pragma acc parallel loop reduction(+:result)
+			for (int i = 0; i < (n + 2) * (n + 2); i++) {
+				result += matrix_1[i] * matrix_1[i];
+			}
+			norm_res = sqrt(result);
+
+			which_step = 1;
+		}
+		iter++;
+
+		printf("iter: %d, %lf >= %lf\r", iter, err , accuracy);
+		fflush(stdout);
+		
+	} while (err > accuracy && iter < max_iteration);
+}
+
+
 
 int main(int argc, char** argv) {
     int n = 20;
-    double accuracy = 1e-6;
-    int max_iteration = 1000000;
+    // double accuracy = 1e-6;
+    // int max_iteration = 1000000;
 
     // Настройка обработки параметров командной строки
     po::options_description desc("Allowed options");
@@ -53,34 +112,11 @@ int main(int argc, char** argv) {
     init_matrix(matrix, n);
     init_matrix(matrix_new, n);
 
-    double err = 1.0;
-    int iter = 0;
+    // double err = 1.0;
+    // int iter = 0;
 
     const auto start{std::chrono::steady_clock::now()};
-    while (err > accuracy && iter < max_iteration) {
-        err = 0.0;
-
-        #pragma acc parallel loop collapse(2) reduction(max:err)
-        for (int i = 1; i < n - 1; i++) {
-            for (int j = 1; j < n - 1; j++) {
-                matrix_new[i * n + j] = 0.25 * (
-                    matrix[(i + 1) * n + j] + 
-                    matrix[i * n + j + 1] + 
-                    matrix[i * n + j - 1] + 
-                    matrix[(i - 1) * n + j]
-                );
-                err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-            }
-        }
-
-        #pragma acc parallel loop
-        for (int i = 1; i < n - 1; i++) {
-            for (int j = 1; j < n - 1; j++) {
-                matrix[i * n + j] = matrix_new[i * n + j];
-            }
-        }
-        iter++;
-    }
+    count_matrix(matrix, matrix_new, n);
     const auto end{std::chrono::steady_clock::now()};
     const std::chrono::duration<double> elapsed_seconds{end - start};
     std::cout  << elapsed_seconds.count() << std::endl;
@@ -97,8 +133,8 @@ int main(int argc, char** argv) {
     out_file.write(reinterpret_cast<const char*>(matrix), n * n * sizeof(double));
     out_file.close();
 
-    std::cout << "Iterations: " << iter << "\n";
-    std::cout << "Final error: " << err << "\n";
+    // std::cout << "Iterations: " << iter << "\n";
+    // std::cout << "Final error: " << err << "\n";
 
     delete[] matrix;
     delete[] matrix_new;
