@@ -4,6 +4,7 @@
 #include <algorithm> 
 #include <cmath>
 #include <fstream>
+#include <chrono>
 #include <boost/program_options.hpp>
 
 namespace po = boost::program_options;
@@ -55,7 +56,7 @@ int main(int argc, char** argv) {
     double err = 1.0;
     int iter = 0;
 
-
+    const auto start{std::chrono::steady_clock::now()};
     while (err > accuracy && iter < max_iteration) {
         err = 0.0;
 
@@ -80,6 +81,9 @@ int main(int argc, char** argv) {
         }
         iter++;
     }
+    const auto end{std::chrono::steady_clock::now()};
+    const std::chrono::duration<double> elapsed_seconds{end - start};
+    std::cout  << elapsed_seconds.count() << std::endl;
 
     // Вывод матрицы
     // for (int i = 0; i < n; ++i) {
