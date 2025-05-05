@@ -15,103 +15,74 @@ int max_iteration = 1000000;
 bool which_step = 0;
 
 
-void init_matrix(double* matrix) {
-    matrix[n+1] = 10.0;
-    matrix[n - 1 + n - 1] = 20.0;
-    matrix[(n - 1) * (n - 1)] = 20.0;
-    matrix[(n - 1) * (n - 1) + (n - 1) - 2] = 30.0;
+// void init_matrix(double* matrix) {
+//     matrix[n+1] = 10.0;
+//     matrix[n - 1 + n - 1] = 20.0;
+//     matrix[(n - 1) * (n - 1)] = 20.0;
+//     matrix[(n - 1) * (n - 1) + (n - 1) - 2] = 30.0;
 
-    for (int j = 2; j < n - 2; j++) {
-        matrix[n + j] = matrix[n + 1] + (matrix[n - 1 + n - 1] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
-        matrix[(n - 1) * (n - 1) + j - 1] = matrix[(n - 1) * (n - 1)] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[(n - 1) * (n - 1)]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
-        matrix[j * n + 1] = matrix[n + 1] + (matrix[(n - 1) * (n - 1)] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
-        matrix[j * n + (n - 1) - 1] = matrix[n - 1 + n - 1] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[n - 1 + n - 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
-    }
+//     for (int j = 2; j < n - 2; j++) {
+//         matrix[n + j] = matrix[n + 1] + (matrix[n - 1 + n - 1] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+//         matrix[(n - 1) * (n - 1) + j - 1] = matrix[(n - 1) * (n - 1)] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[(n - 1) * (n - 1)]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+//         matrix[j * n + 1] = matrix[n + 1] + (matrix[(n - 1) * (n - 1)] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+//         matrix[j * n + (n - 1) - 1] = matrix[n - 1 + n - 1] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[n - 1 + n - 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+//     }
+// }
+
+void init_matrix(double *matrix) {
+	double corners[4] = {10.0, 20.0, 30.0, 20.0};
+	
+	for (int i = 0; i < (n + 2) * (n + 2); i++) {
+		matrix[i] = 0.0;
+	}
+	
+	matrix[(n + 2) + 1] = corners[0];
+	matrix[(n + 2) * 2 - 2] = corners[1];
+	matrix[(n + 2) * (n + 1) - 2] = corners[2];
+	matrix[(n + 2) * n + 1] = corners[3];
+	
+	for (int i = (n + 2) + 2, j = 1; i < (n + 2) * 2 - 2; i++, j++) {
+		double coef = (double)(j) / (n - 1);
+		matrix[i] = corners[0] * (1.0 - coef) + corners[1] * coef;
+		matrix[(n + 2) * n + 1 + j] = corners[3] * (1.0 - coef) + corners[2] * coef;
+	}
+
+	for (int i = (n + 2) * 2 - 2 + (n + 2), j = 1; i < (n + 2) * (n + 1) - 2; i+=(n + 2), j++) {
+		double coef = (double)(j) / (n - 1);
+		matrix[i] = corners[1] * (1.0 - coef) + corners[2] * coef;
+		matrix[i - n + 1] = corners[0] * (1.0 - coef) + corners[3] * coef;
+	}
+	
 }
 
 
 void count_matrix(double* matrix, double* matrix_new){
+    double err = 1.0;
     int iter = 0;
-    double norm_res = 0;
+    while (err > accuracy && iter < max_iteration) {
+        err = 0.0;
 
-    do {
-        if (which_step) {
-            #pragma acc parallel loop collapse(2)
-            for (int i = 1; i < n - 1; i++) {
-                for (int j = 1; j < n - 1; j++) {
-                    matrix_new[i * n + j] = 0.25 * (
-                        matrix[(i + 1) * n + j] + 
-                        matrix[i * n + j + 1] + 
-                        matrix[i * n + j - 1] + 
-                        matrix[(i - 1) * n + j]
-                    );
-                }
+        #pragma acc parallel loop collapse(2) reduction(max:err)
+        for (int i = 1; i < (n + 2) - 1; i++) {
+            for (int j = 1; j < (n + 2) - 1; j++) {
+                matrix_new[i * (n + 2) + j] = 0.25 * (
+                matrix[i * (n + 2) + j - 1] 
+                + matrix[i * (n + 2) + j + 1]
+                + matrix[(i - 1) * (n + 2) + j] 
+                + matrix[(i + 1) * (n + 2) + j]);
+                err = fmax(err, fabs(matrix_new[i * (n + 2) + j] - matrix[i * (n + 2) + j]));
             }
-
-            double result = 0.0;
-            #pragma acc parallel loop reduction(+:result)
-            for (int i = 0; i < (n + 2) * (n + 2); i++) {
-                result += matrix_new[i] * matrix_new[i];
-            }
-            norm_res = sqrt(result);
-            which_step = 0;
-        } else{
-            #pragma acc parallel loop collapse(2)
-            for (int i = 1; i < n - 1; i++) {
-                for (int j = 1; j < n - 1; j++) {
-                    matrix[i * n + j] = 0.25 * (
-                        matrix_new[(i + 1) * n + j] + 
-                        matrix_new[i * n + j + 1] + 
-                        matrix_new[i * n + j - 1] + 
-                        matrix_new[(i - 1) * n + j]
-                    );
-                    // err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-                }
-            }
-
-            double result = 0.0;
-            #pragma acc parallel loop reduction(+:result)
-            for (int i = 0; i < (n + 2) * (n + 2); i++) {
-                result += matrix[i] * matrix[i];
-            }
-            norm_res = sqrt(result);
-            which_step = 1;
         }
 
+        #pragma acc parallel loop
+        for (int i = 1; i < (n + 2) - 1; i++) {
+            for (int j = 1; j < (n + 2) - 1; j++) {
+                matrix[i * (n + 2) + j] = matrix_new[i * (n + 2) + j];
+            }
+        }
         iter++;
-        printf("iter: %d, %lf >= %lf\r", iter, norm_res/norm_orig , accuracy);
-		fflush(stdout);
-    } while (norm_res/norm_orig >= accuracy && iter <= max_iteration);
+    }
 }
-
-// void count_matrix(double* matrix, double* matrix_new){
-//     double err = 1.0;
-//     int iter = 0;
-//     while (err > accuracy && iter < max_iteration) {
-//         err = 0.0;
-
-//         #pragma acc parallel loop collapse(2) reduction(max:err)
-//         for (int i = 1; i < n - 1; i++) {
-//             for (int j = 1; j < n - 1; j++) {
-//                 matrix_new[i * n + j] = 0.25 * (
-//                     matrix[(i + 1) * n + j] + 
-//                     matrix[i * n + j + 1] + 
-//                     matrix[i * n + j - 1] + 
-//                     matrix[(i - 1) * n + j]
-//                 );
-//                 err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-//             }
-//         }
-
-//         #pragma acc parallel loop
-//         for (int i = 1; i < n - 1; i++) {
-//             for (int j = 1; j < n - 1; j++) {
-//                 matrix[i * n + j] = matrix_new[i * n + j];
-//             }
-//         }
-//         iter++;
-//     }
-// }
 
 int main(int argc, char** argv) {
 

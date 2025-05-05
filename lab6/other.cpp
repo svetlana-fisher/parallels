@@ -50,30 +50,30 @@ void init_matrix(double *matrix) {
 
 
 void count_matrix(double* matrix_1, double* matrix_2) {
-	double err = 1.0;
-    int iter = 0;
-	// double norm_res = 0;
+	int iter = 0;
+	double norm_res = 0;
+    double err = 1.0;
 	do {
-        err = 0.0;
 		if (which_step) {
 			// из первой во вторую
-      #pragma acc parallel loop collapse(2) reduction(max:err)
+      #pragma acc parallel loop collapse(2)
 			for (int i = 1; i < (NY + 2) - 1; i++) {
 				for (int j = 1; j < (NX + 2) - 1; j++) {
 					matrix_2[i * (NX + 2) + j] = 0.25 * (matrix_1[i * (NX + 2) + j - 1] 
 																				+ matrix_1[i * (NX + 2) + j + 1]
 																				+ matrix_1[(i - 1) * (NX + 2) + j] 
 																				+ matrix_1[(i + 1) * (NX + 2) + j]);
-                err = fmax(err, fabs(matrix_2[i * NX + j] - matrix_1[i * NX + j]));
-				};
+                    err = fmax(err, fabs(matrix_2[i * (NX + 2) + j] - matrix_1[i * (NX + 2) + j]));
+                };
 			}
 
-			// double result = 0.0;
-			// #pragma acc parallel loop reduction(+:result)
-			// for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
-			// 	result += matrix_2[i] * matrix_2[i];
-			// }
-			// norm_res = sqrt(result);
+
+			double result = 0.0;
+			#pragma acc parallel loop reduction(+:result)
+			for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
+				result += matrix_2[i] * matrix_2[i];
+			}
+			norm_res = sqrt(result);
 
 			which_step = 0;
 		} else { 
@@ -85,23 +85,21 @@ void count_matrix(double* matrix_1, double* matrix_2) {
 																				+ matrix_2[i * (NX + 2) + j + 1]
 																				+ matrix_2[(i - 1) * (NX + 2) + j] 
 																				+ matrix_2[(i + 1) * (NX + 2) + j]);
-                err = fmax(err, fabs(matrix_2[i * NX + j] - matrix_1[i * NX + j]));
 				};
-                
 			}
 
-			// double result = 0.0;
-			// #pragma acc parallel loop reduction(+:result)
-			// for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
-			// 	result += matrix_1[i] * matrix_1[i];
-			// }
-			// norm_res = sqrt(result);
+			double result = 0.0;
+			#pragma acc parallel loop reduction(+:result)
+			for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
+				result += matrix_1[i] * matrix_1[i];
+			}
+			norm_res = sqrt(result);
 
 			which_step = 1;
 		}
 		iter++;
 
-		printf("iter: %d, %lf >= %lf\r", iter, err , EPS);
+		printf("iter: %d, %lf >= %lf\r", iter, norm_res/norm_orig , EPS);
 		fflush(stdout);
 		
 	} while (err > EPS && iter < ITER);
@@ -135,13 +133,6 @@ int main(int argc, char *argv[]) {
 	
 	init_matrix(matrix_1);
 	init_matrix(matrix_2);
-
-    // for (int i = 0; i < NX+2; ++i) {
-    //     for (int j = 0; j < NX+2; ++j) {
-    //         std::cout << matrix_2[i * NX + j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
 
 	#pragma acc parallel loop reduction(+:result) 
 	for (int i = 0; i < (NX + 2) * (NY + 2); i++) {

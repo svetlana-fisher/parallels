@@ -26,7 +26,7 @@ void init_matrix(double* matrix, int n) {
 
 
 int main(int argc, char** argv) {
-    int n = 20;
+    int n = 128;
     double accuracy = 1e-6;
     int max_iteration = 1000000;
 
