@@ -11,8 +11,8 @@
 bool which_step = 0;
 
 
-int NX = 256;
-int NY = 256;
+int NX = 20;
+int NY = 20;
 double EPS = 0.000001;
 int ITER = 1000000;
 
