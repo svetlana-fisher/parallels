@@ -1,19 +1,29 @@
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <iostream>
-#include <vector>
-#include <algorithm> 
-#include <cmath>
-#include <fstream>
-#include <chrono>
 #include <boost/program_options.hpp>
+#include <chrono>
 
-namespace po = boost::program_options;
+#define OUT_FILE "result.dat"
+
 bool which_step = 0;
-double accuracy = 1e-6;
-int max_iteration = 1000000;
 
 
-void init_matrix(double* matrix, int n) {
+int NX = 20;
+int NY = 20;
+double EPS = 0.000001;
+int ITER = 1000000;
+
+double norm_orig = 0;
+
+
+#define TAU -0.01
+
+
+void init_matrix(double* matrix) {
+    int n = NX;
     matrix[n+1] = 10.0;
     matrix[n - 1 + n - 1] = 20.0;
     matrix[(n - 1) * (n - 1)] = 20.0;
@@ -27,27 +37,27 @@ void init_matrix(double* matrix, int n) {
     }
 }
 
-void count_matrix(double* matrix_1, double* matrix_2, int n) {
-	double err = 1.0;
-    int iter = 0;
+
+
+void count_matrix(double* matrix_1, double* matrix_2) {
+	int iter = 0;
 	double norm_res = 0;
 	do {
-        err = 0.0;
 		if (which_step) {
 			// из первой во вторую
       #pragma acc parallel loop collapse(2)
-			for (int i = 1; i < (n + 2) - 1; i++) {
-				for (int j = 1; j < (n + 2) - 1; j++) {
-					matrix_2[i * (n + 2) + j] = 0.25 * (matrix_1[i * (n + 2) + j - 1] 
-																				+ matrix_1[i * (n + 2) + j + 1]
-																				+ matrix_1[(i - 1) * (n + 2) + j] 
-																				+ matrix_1[(i + 1) * (n + 2) + j]);
+			for (int i = 1; i < (NY + 2) - 1; i++) {
+				for (int j = 1; j < (NX + 2) - 1; j++) {
+					matrix_2[i * (NX + 2) + j] = 0.25 * (matrix_1[i * (NX + 2) + j - 1] 
+																				+ matrix_1[i * (NX + 2) + j + 1]
+																				+ matrix_1[(i - 1) * (NX + 2) + j] 
+																				+ matrix_1[(i + 1) * (NX + 2) + j]);
 				};
 			}
 
 			double result = 0.0;
 			#pragma acc parallel loop reduction(+:result)
-			for (int i = 0; i < (n + 2) * (n + 2); i++) {
+			for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
 				result += matrix_2[i] * matrix_2[i];
 			}
 			norm_res = sqrt(result);
@@ -56,18 +66,18 @@ void count_matrix(double* matrix_1, double* matrix_2, int n) {
 		} else { 
 			// из второй в первую
       #pragma acc parallel loop collapse(2)
-			for (int i = 1; i < (n + 2) - 1; i++) {
-				for (int j = 1; j < (n + 2) - 1; j++) {
-					matrix_1[i * (n + 2) + j] = 0.25 * (matrix_2[i * (n + 2) + j - 1] 
-																				+ matrix_2[i * (n + 2) + j + 1]
-																				+ matrix_2[(i - 1) * (n + 2) + j] 
-																				+ matrix_2[(i + 1) * (n + 2) + j]);
+			for (int i = 1; i < (NY + 2) - 1; i++) {
+				for (int j = 1; j < (NX + 2) - 1; j++) {
+					matrix_1[i * (NX + 2) + j] = 0.25 * (matrix_2[i * (NX + 2) + j - 1] 
+																				+ matrix_2[i * (NX + 2) + j + 1]
+																				+ matrix_2[(i - 1) * (NX + 2) + j] 
+																				+ matrix_2[(i + 1) * (NX + 2) + j]);
 				};
 			}
 
 			double result = 0.0;
 			#pragma acc parallel loop reduction(+:result)
-			for (int i = 0; i < (n + 2) * (n + 2); i++) {
+			for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
 				result += matrix_1[i] * matrix_1[i];
 			}
 			norm_res = sqrt(result);
@@ -76,67 +86,95 @@ void count_matrix(double* matrix_1, double* matrix_2, int n) {
 		}
 		iter++;
 
-		// printf("iter: %d, %lf >= %lf\r", iter, err , accuracy);
-		// fflush(stdout);
+		printf("iter: %d, %lf >= %lf\r", iter, norm_res/norm_orig , EPS);
+		fflush(stdout);
 		
-	} while (err > accuracy && iter < max_iteration);
+	} while (norm_res/norm_orig >= EPS && iter <= ITER);
 }
 
 
+int main(int argc, char *argv[]) {
+	boost::program_options::options_description desc("Options");
+	desc.add_options()
+		("nx", boost::program_options::value<int>(), "Matrix size in X")
+		("ny", boost::program_options::value<int>(), "Matrix size in Y")
+		("eps", boost::program_options::value<double>(), "Precision")
+		("iters", boost::program_options::value<int>(), "Max iterations");
+	
+	boost::program_options::variables_map vm;
 
-int main(int argc, char** argv) {
-    int n = 20;
-    // double accuracy = 1e-6;
-    // int max_iteration = 1000000;
+	boost::program_options::store(boost::program_options::parse_command_line(argc, argv, desc), vm);
+	boost::program_options::notify(vm);
 
-    // Настройка обработки параметров командной строки
-    po::options_description desc("Allowed options");
-    desc.add_options()
-        ("help", "show help message")
-        ("size", po::value<int>(&n), "grid size (128, 256, 512, 1024)")
-        ("accuracy", po::value<double>(&accuracy), "desired accuracy")
-        ("max_iter", po::value<int>(&max_iteration), "maximum number of iterations");
+	if (vm.count("nx")) NX = vm["nx"].as<int>();
+	if (vm.count("ny")) NY = vm["ny"].as<int>();
+	if (vm.count("eps")) EPS = vm["eps"].as<double>();
+	if (vm.count("iters")) ITER = vm["iters"].as<int>();
 
-    po::variables_map vm;
-    po::store(po::parse_command_line(argc, argv, desc), vm);
-    po::notify(vm);
+	double *matrix_1 = new double[(NX + 2) * (NY + 2)];
+	double *matrix_2 = new double[(NX + 2) * (NY + 2)];
 
-    if (vm.count("help")) {
-        std::cout << desc << "\n";
-        return 0;
+	double result = 0;
+	
+
+	
+	init_matrix(matrix_1);
+	init_matrix(matrix_2);
+
+	#pragma acc parallel loop reduction(+:result) 
+	for (int i = 0; i < (NX + 2) * (NY + 2); i++) {
+		result += matrix_1[i] * matrix_1[i];
+	}
+	norm_orig = sqrt(result);
+
+  const auto start{std::chrono::steady_clock::now()};
+	count_matrix(matrix_1, matrix_2);
+	const auto end{std::chrono::steady_clock::now()};
+  const std::chrono::duration<double> elapsed_seconds{end - start};
+  std::cout  << std::endl << elapsed_seconds.count() << std::endl << std::endl;
+
+
+  if (which_step) {
+    for (int i = 1, k = 0; i < (NY + 2) - 1; i++, k++) {
+      for (int j = 1, l = 0; j < (NX + 2) - 1; j++, l++) {
+        matrix_2[k * NX + l] = matrix_1[i * (NX + 2) + j];
+      }
     }
+    FILE* f = fopen(OUT_FILE, "wb");
 
-    double* matrix = new double[(n + 2) * (n + 2)];
-    double* matrix_new = new double[(n + 2) * (n + 2)];
-
-    init_matrix(matrix, n);
-    init_matrix(matrix_new, n);
-
-    // double err = 1.0;
-    // int iter = 0;
-
-    const auto start{std::chrono::steady_clock::now()};
-    count_matrix(matrix, matrix_new, n);
-    const auto end{std::chrono::steady_clock::now()};
-    const std::chrono::duration<double> elapsed_seconds{end - start};
-    std::cout  << elapsed_seconds.count() << std::endl;
-
-    // Вывод матрицы
-    // for (int i = 0; i < n; ++i) {
-    //     for (int j = 0; j < n; ++j) {
-    //         std::cout << matrix[i * n + j] << " ";
-    //     }
-    //     std::cout << std::endl;
+    fwrite(matrix_2, sizeof(double), NY * NX, f);
+    fclose(f);
+    // for (int i = 0; i < NY; i++) {
+    // 	for (int j = 0; j < NX; j++) {
+    // 		std::cout << matrix_2[i * NX + j] << ' ' ;
+    // 	}
+    // 	std::cout << std::endl;
     // }
 
-    std::ofstream out_file("result.dat", std::ios::binary);
-    out_file.write(reinterpret_cast<const char*>(matrix), n * n * sizeof(double));
-    out_file.close();
+  } else {
+    for (int i = 1, k = 0; i < (NY + 2) - 1; i++, k++) {
+      for (int j = 1, l = 0; j < (NX + 2) - 1; j++, l++) {
+        matrix_1[k * NX + l] = matrix_2[i * (NX + 2) + j];
+      }
+    }
+    FILE* f = fopen(OUT_FILE, "wb");
 
-    // std::cout << "Iterations: " << iter << "\n";
-    // std::cout << "Final error: " << err << "\n";
+    fwrite(matrix_1, sizeof(double), NY * NX, f);
+    fclose(f);
 
-    delete[] matrix;
-    delete[] matrix_new;
-    return 0;
+    // for (int i = 0; i < NY; i++) {
+    // 	for (int j = 0; j < NX; j++) {
+    // 		std::cout << matrix_1[i * NX + j] << ' ' ;
+    // 	}
+    // 	std::cout << std::endl;
+    // }
+  }
+	
+
+	
+	
+	delete[] matrix_1;
+	delete[] matrix_2;
+	
+	return 0;
 }
