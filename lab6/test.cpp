@@ -8,7 +8,6 @@
 #include <boost/program_options.hpp>
 
 namespace po = boost::program_options;
-bool which_step = 0;
 
 
 void init_matrix(double* matrix, int n) {
@@ -61,29 +60,24 @@ int main(int argc, char** argv) {
     while (err > accuracy && iter < max_iteration) {
         err = 0.0;
 
-        if (which_step) {
-            #pragma acc parallel loop collapse(2) reduction(max:err)
-            for (int i = 1; i < n - 1; i++) {
-                for (int j = 1; j < n - 1; j++) {
-                    matrix_new[i * n + j] = 0.25 * (
-                        matrix[(i + 1) * n + j] + 
-                        matrix[i * n + j + 1] + 
-                        matrix[i * n + j - 1] + 
-                        matrix[(i - 1) * n + j]
-                    );
-                    err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
-                }
+        #pragma acc parallel loop collapse(2) reduction(max:err)
+        for (int i = 1; i < n - 1; i++) {
+            for (int j = 1; j < n - 1; j++) {
+                matrix_new[i * n + j] = 0.25 * (
+                    matrix[(i + 1) * n + j] + 
+                    matrix[i * n + j + 1] + 
+                    matrix[i * n + j - 1] + 
+                    matrix[(i - 1) * n + j]
+                );
+                err = fmax(err, fabs(matrix_new[i * n + j] - matrix[i * n + j]));
             }
-            which_step = 0;
+        }
 
-        } else { 
-            #pragma acc parallel loop
-            for (int i = 1; i < n - 1; i++) {
-                for (int j = 1; j < n - 1; j++) {
-                    matrix[i * n + j] = matrix_new[i * n + j];
-                }
+        #pragma acc parallel loop
+        for (int i = 1; i < n - 1; i++) {
+            for (int j = 1; j < n - 1; j++) {
+                matrix[i * n + j] = matrix_new[i * n + j];
             }
-            which_step = 1;
         }
         iter++;
     }
