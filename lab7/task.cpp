@@ -1,0 +1,140 @@
+#include <stdio.h>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <chrono>
+#include <boost/program_options.hpp>
+#include <openacc.h>
+#include <cublas_v2.h>
+
+namespace po = boost::program_options;
+
+void init_matrix(double* matrix, int n) {
+    matrix[n + 1] = 10.0;
+    matrix[(n - 1) * n + (n - 1)] = 20.0;
+    matrix[(n - 1) * n + 1] = 20.0;
+    matrix[(n - 1) * n + (n - 1) - 2] = 30.0;
+
+    for (int j = 2; j < n - 2; j++) {
+        matrix[n + j] = matrix[n + 1] + (matrix[(n - 1) * n + (n - 1)] - matrix[n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
+        matrix[(n - 1) * n + j] = matrix[(n - 1) * n + 1] + (matrix[(n - 1) * n + (n - 1) - 2] - matrix[(n - 1) * n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
+        matrix[j * n + 1] = matrix[n + 1] + (matrix[(n - 1) * n + 1] - matrix[n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
+        matrix[j * n + (n - 1) - 1] = matrix[(n - 1) * n + (n - 1)] + (matrix[(n - 1) * n + (n - 1) - 2] - matrix[(n - 1) * n + (n - 1)]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
+    }
+}
+
+int main(int argc, char** argv) {
+    int n = 512;
+    double accuracy = 1e-6;
+    int max_iteration = 1000000;
+
+    po::options_description desc("Allowed options");
+    desc.add_options()
+        ("help", "show help message")
+        ("size", po::value<int>(&n), "grid size (128, 256, 512, 1024)")
+        ("accuracy", po::value<double>(&accuracy), "desired accuracy")
+        ("max_iter", po::value<int>(&max_iteration), "maximum number of iterations");
+
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::notify(vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        return 0;
+    }
+
+    // Инициализация cuBLAS
+    cublasHandle_t handle;
+    cublasStatus_t stat = cublasCreate(&handle);
+    if (stat != CUBLAS_STATUS_SUCCESS) {
+        std::cerr << "CUBLAS initialization failed\n";
+        return 1;
+    }
+
+    double* matrix = new double[(n + 2) * (n + 2)];
+    double* matrix_new = new double[(n + 2) * (n + 2)];
+    double* diff = new double[(n - 2) * (n - 2)]; // Массив разностей
+
+    init_matrix(matrix, n);
+    init_matrix(matrix_new, n);
+
+    double err = 1.0;
+    int iter = 0;
+    bool step = false;
+
+    const auto start{std::chrono::steady_clock::now()};
+
+    #pragma acc data copy(matrix[0:(n + 2) * (n + 2)], matrix_new[0:(n + 2) * (n + 2)]) create(diff[0:(n - 2) * (n - 2)])
+    {
+        while (err > accuracy && iter < max_iteration) {
+            err = 0.0;
+
+            if (!step) {
+                #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
+                for (int i = 1; i < n - 1; ++i) {
+                    for (int j = 1; j < n - 1; ++j) {
+                        const int idx = (i - 1) * (n - 2) + (j - 1);
+                        matrix_new[i * n + j] = 0.25 * (
+                            matrix[(i + 1) * n + j] +
+                            matrix[i * n + j + 1] +
+                            matrix[i * n + j - 1] +
+                            matrix[(i - 1) * n + j]
+                        );
+                        diff[idx] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
+                    }
+                }
+            } else {
+                #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
+                for (int i = 1; i < n - 1; ++i) {
+                    for (int j = 1; j < n - 1; ++j) {
+                        const int idx = (i - 1) * (n - 2) + (j - 1);
+                        matrix[i * n + j] = 0.25 * (
+                            matrix_new[(i + 1) * n + j] +
+                            matrix_new[i * n + j + 1] +
+                            matrix_new[i * n + j - 1] +
+                            matrix_new[(i - 1) * n + j]
+                        );
+                        diff[idx] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
+                    }
+                }
+            }
+
+            // Находим максимальное значение
+            int max_idx;
+            #pragma acc host_data use_device(diff)
+            {
+                stat = cublasIdamax(handle, (n - 2) * (n - 2), diff, 1, &max_idx);
+                if (stat != CUBLAS_STATUS_SUCCESS) {
+                    std::cerr << "cublasIdamax failed\n";
+                    break;
+                }
+            }
+
+            #pragma acc update self(diff[max_idx - 1:1])
+            err = diff[max_idx - 1];
+
+            step = !step;
+            iter++;
+        }
+    }
+
+    const auto end{std::chrono::steady_clock::now()};
+    const std::chrono::duration<double> elapsed_seconds{end - start};
+    std::cout << "Time: " << elapsed_seconds.count() << " seconds\n";
+
+    std::ofstream out_file("result.dat", std::ios::binary);
+    out_file.write(reinterpret_cast<const char*>(matrix), n * n * sizeof(double));
+    out_file.close();
+
+    std::cout << "Iterations: " << iter << "\n";
+    std::cout << "Final error: " << err << "\n";
+
+    cublasDestroy(handle);
+    delete[] matrix;
+    delete[] matrix_new;
+    delete[] diff;
+    return 0;
+}
