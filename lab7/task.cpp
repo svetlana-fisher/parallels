@@ -1,29 +1,30 @@
 #include <stdio.h>
 #include <iostream>
 #include <vector>
-#include <algorithm>
+#include <algorithm> 
 #include <cmath>
 #include <fstream>
 #include <chrono>
 #include <boost/program_options.hpp>
-#include <openacc.h>
 #include <cublas_v2.h>
 
 namespace po = boost::program_options;
 
+
 void init_matrix(double* matrix, int n) {
-    matrix[n + 1] = 10.0;
-    matrix[(n - 1) * n + (n - 1)] = 20.0;
-    matrix[(n - 1) * n + 1] = 20.0;
-    matrix[(n - 1) * n + (n - 1) - 2] = 30.0;
+    matrix[n+1] = 10.0;
+    matrix[n - 1 + n - 1] = 20.0;
+    matrix[(n - 1) * (n - 1)] = 20.0;
+    matrix[(n - 1) * (n - 1) + (n - 1) - 2] = 30.0;
 
     for (int j = 2; j < n - 2; j++) {
-        matrix[n + j] = matrix[n + 1] + (matrix[(n - 1) * n + (n - 1)] - matrix[n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
-        matrix[(n - 1) * n + j] = matrix[(n - 1) * n + 1] + (matrix[(n - 1) * n + (n - 1) - 2] - matrix[(n - 1) * n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
-        matrix[j * n + 1] = matrix[n + 1] + (matrix[(n - 1) * n + 1] - matrix[n + 1]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
-        matrix[j * n + (n - 1) - 1] = matrix[(n - 1) * n + (n - 1)] + (matrix[(n - 1) * n + (n - 1) - 2] - matrix[(n - 1) * n + (n - 1)]) * (static_cast<double>(j - 1) / static_cast<double>(n - 3));
+        matrix[n + j] = matrix[n + 1] + (matrix[n - 1 + n - 1] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+        matrix[(n - 1) * (n - 1) + j - 1] = matrix[(n - 1) * (n - 1)] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[(n - 1) * (n - 1)]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+        matrix[j * n + 1] = matrix[n + 1] + (matrix[(n - 1) * (n - 1)] - matrix[n + 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
+        matrix[j * n + (n - 1) - 1] = matrix[n - 1 + n - 1] + (matrix[(n - 1) * (n - 1) + (n - 1) - 2] - matrix[n - 1 + n - 1]) * (static_cast<double>(j-1) / static_cast<double>(n - 3));
     }
 }
+
 
 int main(int argc, char** argv) {
     int n = 20;
@@ -46,84 +47,87 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    // Инициализация cuBLAS
-    cublasHandle_t handle;
-    cublasStatus_t stat = cublasCreate(&handle);
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        std::cerr << "CUBLAS initialization failed\n";
-        return 1;
-    }
-
     double* matrix = new double[(n + 2) * (n + 2)];
     double* matrix_new = new double[(n + 2) * (n + 2)];
-    double* diff = new double[(n + 2) * (n + 2)]; // Массив разностей
+    double* diff = new double[(n + 2) * (n + 2)];
 
     init_matrix(matrix, n);
     init_matrix(matrix_new, n);
 
+    // for (int i = 0; i < n; ++i) {
+    //     for (int j = 0; j < n; ++j) {
+    //         std::cout << matrix[i * n + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+
     double err = 1.0;
     int iter = 0;
-    bool step = false;
+
+    bool step = 0;
+
+    auto cublas_deleter = [](cublasHandle_t* handle) {
+        if (handle && *handle) {
+            cublasDestroy(*handle);
+            delete handle;
+        }
+    };
+    std::unique_ptr<cublasHandle_t, decltype(cublas_deleter)> handle(new cublasHandle_t, cublas_deleter);
+    cublasCreate(handle.get());
 
     const auto start{std::chrono::steady_clock::now()};
+    #pragma acc data copy(matrix[:n*n], matrix_new[:n*n]) create(diff[0:n*n])
+    while (err > accuracy && iter < max_iteration) {
+        err = 0.0;
 
-    #pragma acc data copy(matrix[0:(n + 2) * (n + 2)], matrix_new[0:(n + 2) * (n + 2)]) create(diff[0:(n + 2) * (n + 2)])
-    {
-        while (err > accuracy && iter < max_iteration) {
-            err = 0.0;
-
-            if (!step) {
-                #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
-                for (int i = 1; i < n - 1; ++i) {
-                    for (int j = 1; j < n - 1; ++j) {
-                        const int idx = i * n + j;
-                        matrix_new[i * n + j] = 0.25 * (
-                            matrix[(i + 1) * n + j] +
-                            matrix[i * n + j + 1] +
-                            matrix[i * n + j - 1] +
-                            matrix[(i - 1) * n + j]
-                        );
-                        diff[idx] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
-                    }
-                }
-            } else {
-                #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
-                for (int i = 1; i < n - 1; ++i) {
-                    for (int j = 1; j < n - 1; ++j) {
-                        const int idx = i * n + j;
-                        matrix[i * n + j] = 0.25 * (
-                            matrix_new[(i + 1) * n + j] +
-                            matrix_new[i * n + j + 1] +
-                            matrix_new[i * n + j - 1] +
-                            matrix_new[(i - 1) * n + j]
-                        );
-                        diff[idx] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
-                    }
+        if (!step) {
+            #pragma acc parallel loop collapse(2) present(matrix_new, matrix, diff)
+            for (int i = 1; i < n - 1; i++) {
+                for (int j = 1; j < n - 1; j++) {
+                    matrix_new[i * n + j] = 0.25 * (
+                        matrix[(i + 1) * n + j] + 
+                        matrix[i * n + j + 1] + 
+                        matrix[i * n + j - 1] + 
+                        matrix[(i - 1) * n + j]
+                    );
+                    diff[i * n + j] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
                 }
             }
-
-            // Находим максимальное значение
-            int max_idx;
-            #pragma acc host_data use_device(diff)
-            {
-                stat = cublasIdamax(handle, (n + 2) * (n + 2), diff, 1, &max_idx);
-                if (stat != CUBLAS_STATUS_SUCCESS) {
-                    std::cerr << "cublasIdamax failed\n" << stat << "\n";
-                    break;
+            step = 1;
+        } else {
+            #pragma acc parallel loop collapse(2) present(matrix_new, matrix, diff)
+            for (int i = 1; i < n - 1; i++) {
+                for (int j = 1; j < n - 1; j++) {
+                    matrix[i * n + j] = 0.25 * (
+                        matrix_new[(i + 1) * n + j] + 
+                        matrix_new[i * n + j + 1] + 
+                        matrix_new[i * n + j - 1] + 
+                        matrix_new[(i - 1) * n + j]
+                    );
+                    diff[i * n + j] = fabs(matrix_new[i * n + j] - matrix[i * n + j]);
                 }
             }
-
-            #pragma acc update self(diff[max_idx - 1:1])
-            err = diff[max_idx - 1];
-
-            step = !step;
-            iter++;
+            step = 0;
         }
+        int max_idx;
+        #pragma acc host_data use_device(diff)
+        {
+            cublasIdamax(*handle, n*n, diff, 1, &max_idx);
+            cudaMemcpy(&err, &diff[max_idx-1], sizeof(double), cudaMemcpyDeviceToHost);
+        }
+        iter++;
     }
-
     const auto end{std::chrono::steady_clock::now()};
     const std::chrono::duration<double> elapsed_seconds{end - start};
-    std::cout << "Time: " << elapsed_seconds.count() << " seconds\n";
+    std::cout  << elapsed_seconds.count() << std::endl;
+
+    // Вывод матрицы
+    // for (int i = 0; i < n; ++i) {
+    //     for (int j = 0; j < n; ++j) {
+    //         std::cout << matrix[i * n + j] << " ";
+    //     }
+    //     std::cout << std::endl;
+    // }
 
     std::ofstream out_file("result.dat", std::ios::binary);
     out_file.write(reinterpret_cast<const char*>(matrix), n * n * sizeof(double));
@@ -132,7 +136,6 @@ int main(int argc, char** argv) {
     std::cout << "Iterations: " << iter << "\n";
     std::cout << "Final error: " << err << "\n";
 
-    cublasDestroy(handle);
     delete[] matrix;
     delete[] matrix_new;
     delete[] diff;
