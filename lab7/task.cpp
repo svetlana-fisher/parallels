@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
 
     double* matrix = new double[(n + 2) * (n + 2)];
     double* matrix_new = new double[(n + 2) * (n + 2)];
-    double* diff = new double[(n - 2) * (n - 2)]; // Массив разностей
+    double* diff = new double[(n + 2) * (n + 2)]; // Массив разностей
 
     init_matrix(matrix, n);
     init_matrix(matrix_new, n);
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
                 #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
                 for (int i = 1; i < n - 1; ++i) {
                     for (int j = 1; j < n - 1; ++j) {
-                        const int idx = (i - 1) * (n - 2) + (j - 1);
+                        const int idx = i * n + j;
                         matrix_new[i * n + j] = 0.25 * (
                             matrix[(i + 1) * n + j] +
                             matrix[i * n + j + 1] +
@@ -106,9 +106,9 @@ int main(int argc, char** argv) {
             int max_idx;
             #pragma acc host_data use_device(diff)
             {
-                stat = cublasIdamax(handle, (n - 2) * (n - 2), diff, 1, &max_idx);
+                stat = cublasIdamax(handle, (n+ 2) * (n + 2), diff, 1, &max_idx);
                 if (stat != CUBLAS_STATUS_SUCCESS) {
-                    std::cerr << "cublasIdamax failed\n";
+                    std::cerr << "cublasIdamax failed\n" << stat << "\n";
                     break;
                 }
             }
