@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 
     const auto start{std::chrono::steady_clock::now()};
 
-    #pragma acc data copy(matrix[0:(n + 2) * (n + 2)], matrix_new[0:(n + 2) * (n + 2)]) create(diff[0:(n - 2) * (n - 2)])
+    #pragma acc data copy(matrix[0:(n + 2) * (n + 2)], matrix_new[0:(n + 2) * (n + 2)]) create(diff[0:(n + 2) * (n + 2)])
     {
         while (err > accuracy && iter < max_iteration) {
             err = 0.0;
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
                 #pragma acc parallel loop collapse(2) present(matrix, matrix_new, diff)
                 for (int i = 1; i < n - 1; ++i) {
                     for (int j = 1; j < n - 1; ++j) {
-                        const int idx = (i - 1) * (n - 2) + (j - 1);
+                        const int idx = i * n + j;
                         matrix[i * n + j] = 0.25 * (
                             matrix_new[(i + 1) * n + j] +
                             matrix_new[i * n + j + 1] +
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
             int max_idx;
             #pragma acc host_data use_device(diff)
             {
-                stat = cublasIdamax(handle, (n+ 2) * (n + 2), diff, 1, &max_idx);
+                stat = cublasIdamax(handle, (n + 2) * (n + 2), diff, 1, &max_idx);
                 if (stat != CUBLAS_STATUS_SUCCESS) {
                     std::cerr << "cublasIdamax failed\n" << stat << "\n";
                     break;
